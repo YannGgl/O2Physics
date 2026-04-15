@@ -36,31 +36,45 @@ using myMcTracks = soa::Join<myTracks, o2::aod::McTrackLabels>;
 
 struct taskYann {
 
-  Configurable<float> cfgZmax{"cfgZmax", 10., "Restriction on the PV position |PVz|<zMax (cm)"};
+  Configurable<float> cfgZmax{"cfgZmax", 10.f, "Restriction on the PV position |PVz|<zMax (cm)"};
 
   OutputObj<TH1F> hVtx{
     TH1F("hVtx", "Primary vertex position after selection; Z (cm)", 100, -20., 20.)};
 
-  OutputObj<TH2F> hTpc{
-    TH2F("hTpc", "TPC; Momentum (GeV); dE/dx", 400, -4., 4., 200, 0., 1000)};
-  OutputObj<TH2F> hTof{
-    TH2F("hTof", "TOF; Momentum (GeV); beta", 500, -5., 5., 220, 0., 1.1)};
+  OutputObj<TH2F> hTpc_initial{
+    TH2F("hTpc_initial", "TPC; Momentum (GeV); dE/dx", 400, -4., 4., 200, 0., 1000)};
+  OutputObj<TH2F> hTof_initial{
+    TH2F("hTof_initial", "TOF; Momentum (GeV); beta", 500, -5., 5., 220, 0., 1.1)};
+
+  OutputObj<TH2F> hTpc1{
+    TH2F("hTpc1", "TPC; Momentum (GeV); dE/dx", 400, -4., 4., 200, 0., 1000)};
+  OutputObj<TH2F> hTof1{
+    TH2F("hTof1", "TOF; Momentum (GeV); beta", 500, -5., 5., 220, 0., 1.1)};
+
+  /*
+  OutputObj<TH2F> hTpc2{
+    TH2F("hTpc2", "TPC; Momentum (GeV); dE/dx", 400, -4., 4., 200, 0., 1000)};
+  OutputObj<TH2F> hTof2{
+    TH2F("hTof2", "TOF; Momentum (GeV); beta", 500, -5., 5., 220, 0., 1.1)};
+  */
 
   HistogramRegistry registry{
     "registry",
     {
-      {"hMinv_Total", "Invariant mass; m (GeV); Entries", { HistType::kTH1F, { { 500, 1., 1.5 } } } },
-      {"hMinv_PID", "Invariant mass; m (GeV); Entries", { HistType::kTH1F, { { 500, 1., 1.5 } } } }
+      {"hMinv_Total", "Invariant mass; m (GeV); Entries", { HistType::kTH1F, { { 500, 1.8, /*1.5*/ 2.3 } } } },
+      {"hMinv_PID", "Invariant mass; m (GeV); Entries", { HistType::kTH1F, { { 500, 1.8, /*1.5*/ 2.3 } } } }
     }
   };
 
   HistogramRegistry registryMC{
     "registryMC",
     {
-      {"hTofMC", "TOF; Momentum (GeV); beta", { HistType::kTH2F, { { 500, -5., 5.}, { 220, 0., 1.1 } } } },
-      {"hTpcMC", "TPC; Momentum (GeV); dE/dx", { HistType::kTH2F, { { 400, -4., 4.}, { 200, 0., 1000 } } } },
-      {"hMinvMC", "Invariant mass; m (GeV); Entries", { HistType::kTH1F, { { 500, 1., 1.5 } } } },
-      {"hMinvMC_Matched", "Invariant mass; m (GeV); Entries", { HistType::kTH1F, { { 500, 1., 1.5 } } }}
+      {"hTofMC1", "TOF; Momentum (GeV); beta", { HistType::kTH2F, { { 500, -5., 5.}, { 220, 0., 1.1 } } } },
+      {"hTpcMC1", "TPC; Momentum (GeV); dE/dx", { HistType::kTH2F, { { 400, -4., 4.}, { 200, 0., 1000 } } } },
+      //{"hTofMC2", "TOF; Momentum (GeV); beta", { HistType::kTH2F, { { 500, -5., 5.}, { 220, 0., 1.1 } } } },
+      //{"hTpcMC2", "TPC; Momentum (GeV); dE/dx", { HistType::kTH2F, { { 400, -4., 4.}, { 200, 0., 1000 } } } },
+      {"hMinvMC", "Invariant mass; m (GeV); Entries", { HistType::kTH1F, { { 500, 1.8, /*1.5*/ 2.3 } } } },
+      {"hMinvMC_Matched", "Invariant mass; m (GeV); Entries", { HistType::kTH1F, { { 500, 1.8, /*1.5*/ 2.3 } } }}
     }
   };
   
@@ -70,12 +84,12 @@ struct taskYann {
   }
 
   // Collision selector
-  // True when collision(=PV) within Zmax(=10cm) distance of geometrical center
+  // True when collision(=PV) within Zmax(=7cm) distance of geometrical center
   // False otherwise
   bool isCollisionAccepted(aod::Collision const& collision)
   {
     auto z = collision.posZ();
-    if (abs(z) > cfgZmax)
+    if (std::abs(z) > cfgZmax)
       return false;
 
     // Some other selections
@@ -100,16 +114,17 @@ struct taskYann {
   template <typename TrackType>
   bool isTrackAccepted(TrackType const& track)
   {
-    if (!track.hasITS()) // ITS (tracking?) detectors
+    if (!track.hasITS()) // ITS detectors = 7 cylinders (tracking) 
       return false;
 
     if (!track.hasTPC()) // TPC detectors
       return false;
 
-    if (abs(track.tgl()) > 0.9) // eta ?
+    if (abs(track.tgl()) > 0.9) // rapidity (eta/y) 
       return false;
 
-    if (track.itsNCls() < 7) // nb of clusters of ITS ?
+    if (track.itsNCls() < 7) // nb of clusters of ITS (7 max)
+                             // "we require full track of primary particle"
       return false;
 
     // Some other selections
@@ -157,9 +172,10 @@ struct taskYann {
   
   // Function to select MC Truth for antiproton
   template <typename McParticleType>
-  bool isTrueProton(McParticleType const& mcParticle)
+  bool isTrueProton(McParticleType const& mcParticle, const PDG_t& type)
   {
-    if (mcParticle.pdgCode() == kProtonBar)
+    // Type : kProton or kProtonBar
+    if (mcParticle.pdgCode() == type)
       return true;
 
     return false;
@@ -198,6 +214,9 @@ struct taskYann {
       return;
 
     // Collision counter...
+    // if (abs(collision.posZ())>10.f)
+    // float zv=collision.posZ();
+    //    LOG(info) << "#######################################" << zv <<' '<<abs(zv)<<' '<<std::abs(zv)<<' '<<cfgZmax;
     hVtx->Fill(collision.posZ());
 
 
@@ -205,42 +224,61 @@ struct taskYann {
     for (auto const& track1 : tracks) {
       
       // Track quality + sign condition to select particles/antiparticles
-      // sign > 0 = Antiparticles ; sign < 0 = Particles
-      auto sign = track1.sign();
-      if (!isTrackAccepted(track1) || sign > 0)
+      // Select : sign > 0 = Antiparticles ; sign < 0 = Particles
+      auto sign1 = track1.sign();
+      if (!isTrackAccepted(track1) || sign1 > 0)
         continue;
 
-      auto mom = track1.tpcInnerParam();
-      auto dedx = track1.tpcSignal();
-      auto beta = tofBeta(track1);
+      auto mom1 = track1.tpcInnerParam();
+      auto dedx1 = track1.tpcSignal();
+      auto beta1 = tofBeta(track1);
       double m = 0;
+      
 
       // Second (inner) loop over all tracks in a given collision
       for (auto const& track2 : tracks) {
-        if (!isTrackAccepted(track2) || track2.sign() == sign) 
+        auto sign2 = track2.sign();
+        if (!isTrackAccepted(track2) || sign2 == sign1) 
           continue;
 
-        m = sqrt(InvariantMass(track1, track2, 0.94, 0.14));
+        // TPC and TOF info for track2 (for later PID verification with 2D histograms)
+        auto mom2 = track2.tpcInnerParam();
+        auto dedx2 = track2.tpcSignal();
+        auto beta2 = tofBeta(track2);
+
+        m = sqrt(InvariantMass(track1, track2, 0.9383, 0.9383));
 
         // Without PID
         registry.get<TH1>(HIST("hMinv_Total"))->Fill(m);
 
-        // MC Truth block
+
+
+        // MC Truth and Matched block
+        // Conditions on track2 only for etaC meson
         if constexpr (requires {track1.has_mcParticle();}) {
           int idx=-1;
-          if (track1.has_mcParticle()) {
-            auto const& particle = track1.mcParticle();
-            if (isTrueProton(particle)) {
+          if (track1.has_mcParticle() && track2.has_mcParticle()) {
+            auto const& particle1 = track1.mcParticle();
+            auto const& particle2 = track2.mcParticle();
+
+            // For argument "type" of isTrueProton(track, type)
+            // Select : kProton = proton PID ; kProtonBar = antiproton PID
+            if (isTrueProton(particle1, kProtonBar) /*&& isTrueProton(particle2, kProton)*/) {
               registryMC.get<TH1>(HIST("hMinvMC"))->Fill(m);
-              registryMC.get<TH2>(HIST("hTpcMC"))->Fill(sign * mom, dedx);
-              if (particle.has_mothers()) {
-                auto const& mother = particle.template mothers_first_as<aod::McParticles>();
+              registryMC.get<TH2>(HIST("hTpcMC1"))->Fill(sign1 * mom1, dedx1);
+              //registryMC.get<TH2>(HIST("hTpcMC2"))->Fill(sign2 * mom2, dedx2);
+              if (track1.hasTOF() /*&& track2.hasTOF()*/) {
+                registryMC.get<TH2>(HIST("hTofMC1"))->Fill(sign1 * mom1, beta1);
+                //registryMC.get<TH2>(HIST("hTofMC2"))->Fill(sign2 * mom2, beta2);
+              }
+              if (particle1.has_mothers()) {
+                auto const& mother = particle1.template mothers_first_as<aod::McParticles>();
+                // Select : kLambda0Bar = antiproton PID ; kLambda0 = proton PID
                 if (mother.pdgCode() == kLambda0Bar)
+                //if (mother.pdgCode() == 441) // PDG code of etaC meson
                   idx = mother.globalIndex();
               }
             }
-            if (track1.hasTOF())
-              registryMC.get<TH2>(HIST("hTofMC"))->Fill(sign * mom, beta);
           }
           if (track2.has_mcParticle()) {
             auto const& particle = track2.mcParticle();
@@ -252,18 +290,29 @@ struct taskYann {
           }
         }
 
+
+        // Initial TOF and TPC histograms, before cuts
+        if (track1.hasTOF())
+          hTof_initial->Fill(sign1 * mom1, beta1);
+        
+        hTpc_initial->Fill(sign1 * mom1, dedx1); 
+        
+
         // With PID
-        if (!track1.hasTOF() || mom<0.5) { // This block is for PID with TPC
-          if (!isTrackProtonTPC(track1) || mom>1.5)
+        // Conditions on track2 only for etaC meson
+        if (!track1.hasTOF() || mom1<0.5 /*|| !track2.hasTOF()  || mom2<0.5*/) { // This block is for PID with TPC
+          if (!isTrackProtonTPC(track1) /*|| !isTrackProtonTPC(track2) || mom1>1.5 || mom2>1.5*/ )
             continue;
           registry.get<TH1>(HIST("hMinv_PID"))->Fill(m);
-          hTpc->Fill(sign * mom, dedx);
+          hTpc1->Fill(sign1 * mom1, dedx1);
+          //hTpc2->Fill(sign2 * mom2, dedx2);
         }
         else { // This block is for PID with TOF
-          if (!isTrackProtonTOF(track1))
+          if (!isTrackProtonTOF(track1) /*|| !isTrackProtonTOF(track2)*/)
             continue;
           registry.get<TH1>(HIST("hMinv_PID"))->Fill(m);
-          hTof->Fill(sign * mom, beta);
+          hTof1->Fill(sign1 * mom1, beta1);
+          //hTof2->Fill(sign2 * mom2, beta2);
         }   
       }
     }

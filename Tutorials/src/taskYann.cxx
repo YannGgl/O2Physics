@@ -61,8 +61,8 @@ struct taskYann {
   HistogramRegistry registry{
     "registry",
     {
-      {"hMinv_Total", "Invariant mass; m (GeV); Entries", { HistType::kTH1F, { { 500, 1.8, /*1.5*/ 2.3 } } } },
-      {"hMinv_PID", "Invariant mass; m (GeV); Entries", { HistType::kTH1F, { { 500, 1.8, /*1.5*/ 2.3 } } } }
+      {"hMinv_Total", "Invariant mass; m (GeV); Entries", { HistType::kTH1F, { { /*500*/ 2800, 1., /*1.5 2.3*/ 3.8 } } } },
+      {"hMinv_PID", "Invariant mass; m (GeV); Entries", { HistType::kTH1F, { { /*500*/ 2800, 1., /*1.5 2.3*/ 3.8 } } } }
     }
   };
 
@@ -73,8 +73,9 @@ struct taskYann {
       {"hTpcMC1", "TPC; Momentum (GeV); dE/dx", { HistType::kTH2F, { { 400, -4., 4.}, { 200, 0., 1000 } } } },
       //{"hTofMC2", "TOF; Momentum (GeV); beta", { HistType::kTH2F, { { 500, -5., 5.}, { 220, 0., 1.1 } } } },
       //{"hTpcMC2", "TPC; Momentum (GeV); dE/dx", { HistType::kTH2F, { { 400, -4., 4.}, { 200, 0., 1000 } } } },
-      {"hMinvMC", "Invariant mass; m (GeV); Entries", { HistType::kTH1F, { { 500, 1.8, /*1.5*/ 2.3 } } } },
-      {"hMinvMC_Matched", "Invariant mass; m (GeV); Entries", { HistType::kTH1F, { { 500, 1.8, /*1.5*/ 2.3 } } }}
+      {"hMinvMC", "Invariant mass; m (GeV); Entries", { HistType::kTH1F, { { /*500*/ 2800, 1., /*1.5 2.3*/ 3.8 } } } },
+      {"hMinvMC_Matched", "Invariant mass; m (GeV); Entries", { HistType::kTH1F, { { /*500*/ 2800, 1., /*1.5 2.3*/ 3.8 } } } }
+      // {"hMinvMC_Matched_Proton", "Invariant mass; m (GeV); Entries", { HistType::kTH1F, { { /*500*/ 2800, 1., /*1.5 2.3*/ 3.8 } } }}
     }
   };
   
@@ -83,8 +84,12 @@ struct taskYann {
   {
   }
 
+
+  // Code actually in mode : Lbar  (large p range + correct mass hypothesis)
+
+
   // Collision selector
-  // True when collision(=PV) within Zmax(=7cm) distance of geometrical center
+  // True when collision(=PV) within Zmax(=10cm) distance of geometrical center
   // False otherwise
   bool isCollisionAccepted(aod::Collision const& collision)
   {
@@ -246,7 +251,7 @@ struct taskYann {
         auto dedx2 = track2.tpcSignal();
         auto beta2 = tofBeta(track2);
 
-        m = sqrt(InvariantMass(track1, track2, 0.9383, 0.9383));
+        m = sqrt(InvariantMass(track1, track2, 0.9383, 0.1396 /*0.9383*/));
 
         // Without PID
         registry.get<TH1>(HIST("hMinv_Total"))->Fill(m);
@@ -257,7 +262,7 @@ struct taskYann {
         // Conditions on track2 only for etaC meson
         if constexpr (requires {track1.has_mcParticle();}) {
           int idx=-1;
-          if (track1.has_mcParticle() && track2.has_mcParticle()) {
+          if (track1.has_mcParticle() /*&& track2.has_mcParticle()*/) {
             auto const& particle1 = track1.mcParticle();
             auto const& particle2 = track2.mcParticle();
 
@@ -291,29 +296,74 @@ struct taskYann {
         }
 
 
-        // Initial TOF and TPC histograms, before cuts
-        if (track1.hasTOF())
+        // Initial track1 TOF and TPC histograms, before any cuts
+        if (track1.hasTOF() && mom1>0.5)
           hTof_initial->Fill(sign1 * mom1, beta1);
+        if (track2.hasTOF() && mom2>0.5)
+          hTof_initial->Fill(sign2 * mom2, beta2);
         
         hTpc_initial->Fill(sign1 * mom1, dedx1); 
+        hTpc_initial->Fill(sign2 * mom2, dedx2); 
         
 
         // With PID
         // Conditions on track2 only for etaC meson
-        if (!track1.hasTOF() || mom1<0.5 /*|| !track2.hasTOF()  || mom2<0.5*/) { // This block is for PID with TPC
-          if (!isTrackProtonTPC(track1) /*|| !isTrackProtonTPC(track2) || mom1>1.5 || mom2>1.5*/ )
+        // This block is for PID with TPC 1
+        if (!track1.hasTOF() || mom1<0.5) { 
+          // if (!track2.hasTOF()  || mom2<0.5) { // PID with TPC 2
+            if (!isTrackProtonTPC(track1) /*|| !isTrackProtonTPC(track2)*/)
+              continue;
+            registry.get<TH1>(HIST("hMinv_PID"))->Fill(m);
+            hTpc1->Fill(sign1 * mom1, dedx1);
+            //hTpc2->Fill(sign2 * mom2, dedx2);
+        /*  
+          }
+          else { // PID with TOF 2
+            if (!isTrackProtonTPC(track1) || !isTrackProtonTOF(track2))
+              continue;
+            registry.get<TH1>(HIST("hMinv_PID"))->Fill(m);
+            hTpc1->Fill(sign1 * mom1, dedx1);
+            hTof2->Fill(sign2 * mom2, beta2);
+          }
+        */
+        }
+        // This block is for PID with TOF 1
+        else { 
+          //if (!track2.hasTOF()  || mom2<0.5) { // PID with TPC 2
+            if (!isTrackProtonTOF(track1) /*|| !isTrackProtonTPC(track2)*/)
+              continue;
+            registry.get<TH1>(HIST("hMinv_PID"))->Fill(m);
+            hTof1->Fill(sign1 * mom1, beta1);
+            //hTpc2->Fill(sign2 * mom2, dedx2);
+        /*
+          }
+          else { // PID with TOF 2
+            if (!isTrackProtonTOF(track1) || !isTrackProtonTOF(track2))
+              continue;
+            registry.get<TH1>(HIST("hMinv_PID"))->Fill(m);
+            hTof1->Fill(sign1 * mom1, beta1);
+            hTof2->Fill(sign2 * mom2, beta2);
+          }
+        */
+        }
+
+        /*
+        // Old PID
+        if (!track1.hasTOF() || mom1<0.5 || !track2.hasTOF()  || mom2<0.5) { // This block is for PID with TPC
+          if (!isTrackProtonTPC(track1) || !isTrackProtonTPC(track2))
             continue;
           registry.get<TH1>(HIST("hMinv_PID"))->Fill(m);
           hTpc1->Fill(sign1 * mom1, dedx1);
-          //hTpc2->Fill(sign2 * mom2, dedx2);
+          hTpc2->Fill(sign2 * mom2, dedx2);
         }
         else { // This block is for PID with TOF
-          if (!isTrackProtonTOF(track1) /*|| !isTrackProtonTOF(track2)*/)
+          if (!isTrackProtonTOF(track1) || !isTrackProtonTOF(track2))
             continue;
           registry.get<TH1>(HIST("hMinv_PID"))->Fill(m);
           hTof1->Fill(sign1 * mom1, beta1);
-          //hTof2->Fill(sign2 * mom2, beta2);
+          hTof2->Fill(sign2 * mom2, beta2);
         }   
+        */
       }
     }
   }
@@ -331,8 +381,52 @@ struct taskYann {
   }
   PROCESS_SWITCH(taskYann, processMcRec, "Process MC at the reconstruction level", false);
 
-  void processMcGen(aod::McParticles& particles)
+
+  HistogramRegistry registryMC_Gen{
+    "registryMC_Gen",
+    {
+      {"hZ", "Z position of generated collision; Z (cm); Entries", { HistType::kTH1F, { { 100, -20., 20.} } } },
+      {"hPtMCLbar", "Transverse momentum; p_{T}  [Gev / c]; Entries  per  100 MeV/c", { HistType::kTH1F, { { 330, 0., 33. } } } },
+      {"hPtMCL", "Transverse momentum; p_{T}  [Gev / c]; Entries  per  100 MeV/c", { HistType::kTH1F, { { 330, 0., 33. } } } },
+      {"hPtMCpbar", "Transverse momentum; p_{T}  [Gev / c]; Entries  per  100 MeV/c", { HistType::kTH1F, { { 330, 0., 33. } } } },
+    }
+  };
+
+  void processMcGen(aod::McCollision const& collision, aod::McParticles& particles)
   {
+
+    // Generated collision counter
+    if (std::abs(collision.posZ()) > cfgZmax)
+      return;
+    registryMC_Gen.get<TH1>(HIST("hZ"))->Fill(collision.posZ());
+
+
+    // Loop directly over all MC particles in this collision
+    for (auto const& particle : particles) {
+
+      /*
+      if (particle.has_daughters()) {
+        auto const& daughter = particle.template daughters_first_as<aod::McParticles>();
+        if (std::abs(daughter.eta()) > 0.9)
+          continue;
+      }
+      */
+
+      if (particle.pdgCode() == kLambda0Bar)
+        registryMC_Gen.get<TH1>(HIST("hPtMCLbar"))->Fill(particle.pt());
+
+      if (particle.pdgCode() == kLambda0)
+        registryMC_Gen.get<TH1>(HIST("hPtMCL"))->Fill(particle.pt());
+
+
+      // Anti proton efficiency
+      if (particle.pdgCode() == kProtonBar // The particle is an anti-proton
+          && std::abs(particle.eta()) < 0.9 // Produced with the good acceptance
+          && sqrt(particle.vx()*particle.vx() + particle.vy()*particle.vy()) < 2.) // Produced before first ITS layer so Primary-like
+        registryMC_Gen.get<TH1>(HIST("hPtMCpbar"))->Fill(particle.pt());
+
+
+    }
   }
   PROCESS_SWITCH(taskYann, processMcGen, "Process MC at the generator level", false);
 };

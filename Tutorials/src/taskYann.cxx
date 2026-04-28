@@ -34,9 +34,18 @@ using myTrack = myTracks::iterator;
 
 using myMcTracks = soa::Join<myTracks, o2::aod::McTrackLabels>;
 
+
+
+// Code actually in mode : Lbar (large p range + correct mass hypothesis)
+
+
+
+
 struct taskYann {
 
   Configurable<float> cfgZmax{"cfgZmax", 10.f, "Restriction on the PV position |PVz|<zMax (cm)"};
+  Configurable<float> cfgEtaMax{"cfgEtaMax", 0.9f, "Restriction in pseudorapidity |eta|<EtaMax"};
+  Configurable<float> cfgPtMin{"cfgPtMin", 0.5f, "Restriction in transverse momentum pt>ptMin (GeV/c)"};
 
   OutputObj<TH1F> hVtx{
     TH1F("hVtx", "Primary vertex position after selection; Z (cm)", 100, -20., 20.)};
@@ -62,7 +71,7 @@ struct taskYann {
     "registry",
     {
       {"hMinv_Total", "Invariant mass; m (GeV); Entries", { HistType::kTH1F, { { /*500*/ 2800, 1., /*1.5 2.3*/ 3.8 } } } },
-      {"hMinv_PID", "Invariant mass; m (GeV); Entries", { HistType::kTH1F, { { /*500*/ 2800, 1., /*1.5 2.3*/ 3.8 } } } }
+      {"hMinv_PID", "Invariant mass; m (GeV); Entries", { HistType::kTH1F, { { /*500*/ 2800, 1., /*1.5 2.3*/ 3.8 } } } },
     }
   };
 
@@ -74,8 +83,8 @@ struct taskYann {
       //{"hTofMC2", "TOF; Momentum (GeV); beta", { HistType::kTH2F, { { 500, -5., 5.}, { 220, 0., 1.1 } } } },
       //{"hTpcMC2", "TPC; Momentum (GeV); dE/dx", { HistType::kTH2F, { { 400, -4., 4.}, { 200, 0., 1000 } } } },
       {"hMinvMC", "Invariant mass; m (GeV); Entries", { HistType::kTH1F, { { /*500*/ 2800, 1., /*1.5 2.3*/ 3.8 } } } },
-      {"hMinvMC_Matched", "Invariant mass; m (GeV); Entries", { HistType::kTH1F, { { /*500*/ 2800, 1., /*1.5 2.3*/ 3.8 } } } }
-      // {"hMinvMC_Matched_Proton", "Invariant mass; m (GeV); Entries", { HistType::kTH1F, { { /*500*/ 2800, 1., /*1.5 2.3*/ 3.8 } } }}
+      {"hMinvMC_Matched", "Invariant mass; m (GeV); Entries", { HistType::kTH1F, { { /*500*/ 2800, 1., /*1.5 2.3*/ 3.8 } } } },
+      {"hPt_Matched_Proton", "Proton transverse momentum; p_{T} (GeV/c); Entries", { HistType::kTH1F, { { 330, 0., 33. } } } },
     }
   };
   
@@ -83,10 +92,6 @@ struct taskYann {
   void init(o2::framework::InitContext& ic)
   {
   }
-
-
-  // Code actually in mode : Lbar  (large p range + correct mass hypothesis)
-
 
   // Collision selector
   // True when collision(=PV) within Zmax(=10cm) distance of geometrical center
@@ -125,7 +130,10 @@ struct taskYann {
     if (!track.hasTPC()) // TPC detectors
       return false;
 
-    if (abs(track.tgl()) > 0.9) // rapidity (eta/y) 
+    if (std::abs(track.eta()) > cfgEtaMax) // rapidity (eta/y) 
+      return false;
+
+    if (track.pt() < cfgPtMin)
       return false;
 
     if (track.itsNCls() < 7) // nb of clusters of ITS (7 max)
@@ -233,6 +241,16 @@ struct taskYann {
       auto sign1 = track1.sign();
       if (!isTrackAccepted(track1) || sign1 > 0)
         continue;
+
+      if constexpr (requires {track1.has_mcParticle();}) {
+        if (track1.has_mcParticle()) {
+          auto const& p1 = track1.mcParticle();
+          if (p1.pdgCode() == kProtonBar) {
+            if (p1.pt() > cfgPtMin)
+              registryMC.get<TH1>(HIST("hPt_Matched_Proton"))->Fill(p1.pt());
+          }
+        }
+      }
 
       auto mom1 = track1.tpcInnerParam();
       auto dedx1 = track1.tpcSignal();
@@ -388,7 +406,7 @@ struct taskYann {
       {"hZ", "Z position of generated collision; Z (cm); Entries", { HistType::kTH1F, { { 100, -20., 20.} } } },
       {"hPtMCLbar", "Transverse momentum; p_{T}  [Gev / c]; Entries  per  100 MeV/c", { HistType::kTH1F, { { 330, 0., 33. } } } },
       {"hPtMCL", "Transverse momentum; p_{T}  [Gev / c]; Entries  per  100 MeV/c", { HistType::kTH1F, { { 330, 0., 33. } } } },
-      {"hPtMCpbar", "Transverse momentum; p_{T}  [Gev / c]; Entries  per  100 MeV/c", { HistType::kTH1F, { { 330, 0., 33. } } } },
+      {"hPtpbar", "Transverse momentum; p_{T}  [Gev / c]; Entries  per  100 MeV/c", { HistType::kTH1F, { { 330, 0., 33. } } } },
     }
   };
 
@@ -403,7 +421,20 @@ struct taskYann {
 
     // Loop directly over all MC particles in this collision
     for (auto const& particle : particles) {
+      if (!particle.isPhysicalPrimary())
+        continue;
 
+      // Anti proton efficiency part
+      if (particle.pdgCode() == kProtonBar) { // The particle is an anti-proton
+        if (std::abs(particle.eta()) < cfgEtaMax) { // Produced with the good acceptance
+          if (particle.pt() > cfgPtMin) { // Produced with a good enough transverse momentum
+            registryMC_Gen.get<TH1>(HIST("hPtpbar"))->Fill(particle.pt());
+          }
+        }
+      }
+
+
+      // Anti Lambda efficiency analysis part
       /*
       if (particle.has_daughters()) {
         auto const& daughter = particle.template daughters_first_as<aod::McParticles>();
@@ -419,11 +450,6 @@ struct taskYann {
         registryMC_Gen.get<TH1>(HIST("hPtMCL"))->Fill(particle.pt());
 
 
-      // Anti proton efficiency
-      if (particle.pdgCode() == kProtonBar // The particle is an anti-proton
-          && std::abs(particle.eta()) < 0.9 // Produced with the good acceptance
-          && sqrt(particle.vx()*particle.vx() + particle.vy()*particle.vy()) < 2.) // Produced before first ITS layer so Primary-like
-        registryMC_Gen.get<TH1>(HIST("hPtMCpbar"))->Fill(particle.pt());
 
 
     }

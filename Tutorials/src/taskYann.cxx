@@ -26,6 +26,9 @@
 
 #include <TPDGCode.h>
 
+#include "Common/DataModel/EventSelection.h"
+
+
 using namespace o2;
 using namespace o2::framework;
 
@@ -34,11 +37,14 @@ using myTrack = myTracks::iterator;
 
 using myMcTracks = soa::Join<myTracks, o2::aod::McTrackLabels>;
 
+using mySelectedEvents = soa::Join<aod::Collisions, aod::EvSels>;
+using mySelectedEvent = mySelectedEvents::iterator;
 
 
-// Code actually in analysis mode : etaC, correct mass hypothesis, 200MeV pt cut for all tracks, 
-// Efficiency for : Anti-proton (proton = PID 2, anti-proton = PID 1) 
+// Code actually in analysis mode : Lambda (Minv C [1;2.8]GeV/c^2 w/ 2800 bins), correct mass hypothesis, 200 MeV/c pt cut + NO 0.5 GeV/c p cut for all tracks, 
+// Efficiency for : Proton (proton = PID 1, anti-proton = ) 
 // PID (in conf.json file) : ON
+// beta 0.4 cut = OFF
 
 
 
@@ -75,25 +81,42 @@ struct taskYann {
     "registry",
     {
       // {"hMinv_Total", "Invariant mass; m (GeV); Entries", { HistType::kTH1F, { { /*500*/ 2800, 1., /*1.5 2.3*/ 3.8 } } } },
-      {"hMinv_PID", "Invariant mass; m  [GeV /c^{2}]; Entries  per  1 MeV/c", { HistType::kTH1F, { { /*500*/ 2800, 1.8, /*1.5 2.3*/ 3.8 } } } },
+      {"hMinv_PID", "Invariant mass; m  [GeV /c^{2}]; Entries  per  1 MeV/c", { HistType::kTH1F, { { /*500*/ 2800, 1., /*1.5 2.3*/ 3.8 } } } },
       {"hTPC_Initial", "TPC without PID; Momentum p  [GeV / c]; dE/dx", { HistType::kTH2F, { { 400, -4., 4. }, { 200, 0., 1000 } } } },
       {"hTOF_Initial", "TOF without PID; Momentum p  [GeV / c]; #beta", { HistType::kTH2F, { { 500, -5., 5. }, { 220, 0., 1.1 } } } },
+      {"hTOFInitialBetterRes", "TOF without PID; Momentum p  [GeV / c]; #beta", { HistType::kTH2F, { { 1000, -5., 5. }, { 440, 0., 1.1 } } } },
       {"hTPC", "TPC; Momentum p  [GeV / c]; dE/dx", { HistType::kTH2F, { { 400, -4., 4. }, { 200, 0., 1000 } } } },
       {"hTOF", "TOF; Momentum p  [GeV / c]; #beta", { HistType::kTH2F, { { 500, -5., 5. }, { 220, 0., 1.1 } } } },
+      {"hTOFBetterRes", "TOF; Momentum p  [GeV / c]; #beta", { HistType::kTH2F, { { 1000, -5., 5. }, { 440, 0., 1.1 } } } },
+      //{"hTOF_over04", "TOF; Momentum p  [GeV / c]; #beta", { HistType::kTH2F, { { 500, -5., 5. }, { 220, 0., 1.1 } } } },
+      //{"hTOF_under04", "TOF; Momentum p  [GeV / c]; #beta", { HistType::kTH2F, { { 500, -5., 5. }, { 220, 0., 1.1 } } } },
     }
   };
 
   HistogramRegistry registryMC{
     "registryMC",
     {
-      {"hTofMC1", "TOF; Momentum p  [GeV / c]; #beta", { HistType::kTH2F, { { 500, -5., 5.}, { 220, 0., 1.1 } } } },
-      {"hTpcMC1", "TPC; Momentum p  [GeV / c]; dE/dx", { HistType::kTH2F, { { 400, -4., 4.}, { 200, 0., 1000 } } } },
+      {"hTOFMC1", "TOF; Momentum p  [GeV / c]; #beta", { HistType::kTH2F, { { 500, -5., 5.}, { 220, 0., 1.1 } } } },
+      {"hTPCMC1", "TPC; Momentum p  [GeV / c]; dE/dx", { HistType::kTH2F, { { 400, -4., 4.}, { 200, 0., 1000 } } } },
       //{"hTofMC2", "TOF; Momentum p  [GeV / c]; #beta", { HistType::kTH2F, { { 500, -5., 5.}, { 220, 0., 1.1 } } } },
       //{"hTpcMC2", "TPC; Momentum p  [GeV / c]; dE/dx", { HistType::kTH2F, { { 400, -4., 4.}, { 200, 0., 1000 } } } },
-      {"hMinvMC", "Invariant mass; m  [GeV /c^{2}]; Entries  per  1 MeV/c", { HistType::kTH1F, { { /*500*/ 2800, 1.8, /*1.5 2.3*/ 3.8 } } } },
-      {"hMinvMC_Matched", "Invariant mass; m [GeV / ]; Entries  per  1 MeV/c", { HistType::kTH1F, { { /*500*/ 2800, 1.8, /*1.5 2.3*/ 3.8 } } } },
+      {"hMinvMC", "Invariant mass; m  [GeV /c^{2}]; Entries  per  1 MeV/c", { HistType::kTH1F, { { /*500*/ 2800, 1., /*1.5 2.3*/ 3.8 } } } },
+      {"hMinvMC_Matched", "Invariant mass; m [GeV /c^{2}]; Entries  per  1 MeV/c", { HistType::kTH1F, { { /*500*/ 2800, 1., /*1.5 2.3*/ 3.8 } } } },
       //{"hPt_Matched_p", "Proton transverse momentum; p_{T} [GeV / c]; Entries  per  100 MeV/c", { HistType::kTH1F, { { 330, 0., 33. } } } },
       {"hPt_Matched", "Particles transverse momentum; p_{T} [GeV / c]; Entries  per  100 MeV/c", { HistType::kTH1F, { { 330, 0., 33. } } } },
+    }
+  };
+
+  HistogramRegistry registryTime{
+    "registryTime",
+    {
+      {"hCollTimeRes", ";Time resolution [ns];Entries", { HistType::kTH1F, { { 5000, 0., 1000 } } } },
+      {"hTrackTimeRes", ";Time resolution [ns];Entries", { HistType::kTH1F, { { 5000, 0., 1000 } } } },
+      //{"hCollTimeRes_beta_over04", ";Time resolution [ns];Entries", { HistType::kTH1F, { { 5000, 0., 1000 } } } },
+      //{"hTrackTimeRes_beta_over04", ";Time resolution [ns];Entries", { HistType::kTH1F, { { 5000, 0., 1000 } } } },
+      //{"hCollTimeRes_beta_under04", ";Time resolution [ns];Entries", { HistType::kTH1F, { { 5000, 0., 1000 } } } },
+      //{"hTrackTimeRes_beta_under04", ";Time resolution [ns];Entries", { HistType::kTH1F, { { 5000, 0., 1000 } } } },
+      //{"hTTR_beta", ";Time resolution [ns]; #beta", { HistType::kTH2F, { { 5000, 0., 1000 }, { 220, 0., 1.1 } } } },
     }
   };
   
@@ -105,13 +128,17 @@ struct taskYann {
   // Collision selector
   // True when collision(=PV) within Zmax(=10cm) distance of geometrical center
   // False otherwise
-  bool isCollisionAccepted(aod::Collision const& collision)
+  template <typename CollisionTypeContainer>
+  bool isCollisionAccepted(CollisionTypeContainer const& collision)
   {
     auto z = collision.posZ();
     if (std::abs(z) > cfgZmax)
       return false;
 
     // Some other selections
+
+    //if (collision.collisionTimeRes() > 3.)
+      //return false;
 
     return true;
   }
@@ -133,6 +160,7 @@ struct taskYann {
   template <typename TrackType>
   bool isTrackAccepted(TrackType const& track)
   {
+    //if (!track.isWithinBeamPipe())
     if (!track.hasITS()) // ITS detectors = 7 cylinders (tracking) 
       return false;
 
@@ -151,6 +179,9 @@ struct taskYann {
 
     // Some other selections
 
+    //if (track.trackTimeRes() < 0.8)
+      //return false;
+
     return true;
   }
 
@@ -160,7 +191,7 @@ struct taskYann {
   bool isTrackProton(TrackType const& track)
   {
     auto mom = track.tpcInnerParam();
-    auto sign = track.sign();
+    // auto sign = track.sign();
 
     if (!track.hasTOF() || mom<0.5) { // TPC
       auto dedx = track.tpcSignal();
@@ -170,7 +201,7 @@ struct taskYann {
       && dedx >= a[1]*mom + b[1]
       && dedx >= a[2]*mom + b[2]
       && dedx >= a[3]*mom + b[3] ) {
-        registry.get<TH2>(HIST("hTPC"))->Fill(sign*mom, dedx);
+        // registry.get<TH2>(HIST("hTPC"))->Fill(sign*mom, dedx);
         return true;
       }
       return false;
@@ -179,14 +210,32 @@ struct taskYann {
       auto beta = tofBeta(track);
       double a[4] = {0.2, 0.01, 1., 0.066};
       double b[4] = {0.6, 0.95, 0., 0.79};
+      //double b[5] = {0.6, 0.95, 0., 0.79, 0.4}; // removes beta < 0.4 
+      //double b[6] = {0.6, 0.95, 0., 0.79, 0.425, 0.330}; // To isolate first horizontal band 
+      
       if ( beta <= a[0]*mom + b[0]
       && beta <= a[1]*mom + b[1]
       && beta <= a[2]*mom + b[2]
-      && beta <= a[3]*mom + b[3] ) {
-        registry.get<TH2>(HIST("hTOF"))->Fill(sign*mom, beta);
+      && beta <= a[3]*mom + b[3]
+      //&& beta >= b[4] 
+      //&& beta <= b[4] // To isolate first horizontal band 
+      //&& beta >= b[5] // To isolate first horizontal band 
+      ) {
+        // registry.get<TH2>(HIST("hTOF"))->Fill(sign*mom, beta);
         return true;
       }
       return false;
+
+      /*if (beta <= 0.425 && beta >= 0.105) {
+        if ( (beta <= 0.335 && beta >= 0.262)
+        || (beta <= 0.198 && beta >= 0.190)
+        || (beta <= 0.135 && beta >= 0.128)
+        ) {
+          return false;
+        }
+        return true;
+      }
+      return false;*/
     }
   }
   
@@ -216,18 +265,25 @@ struct taskYann {
             (track1.pz() + track2.pz())*(track1.pz() + track2.pz()) );
   }
 
-
   // Main method of the task
   // Subscribing to the table Collision, iterating over all tracks of a given collision
-  template <typename TrackTypeContainer>
-  void process(aod::Collision const& collision, TrackTypeContainer const& tracks)
+  template <typename CollisionTypeContainer, typename TrackTypeContainer>
+  void process(CollisionTypeContainer const& collision, TrackTypeContainer const& tracks)
   {
 
+    
     // "Loading bar" (print smthg each X collisions)
     static int ncol = 0;
     if (ncol % 10000 == 0)
       LOG(info) << "Collision: " << ncol;
     ncol++;
+
+    /*if constexpr (requires {collision.has_sel8();}) {
+      if (!collision.sel8()) {
+        return;
+      }
+      LOG(info) << "Sel8() OK?";
+    }*/
 
     if (!isCollisionAccepted(collision))
       return;
@@ -235,6 +291,8 @@ struct taskYann {
     // Collision counter...
     hVtx->Fill(collision.posZ());
 
+    // Collisions time resolution distribution
+    //registryTime.get<TH1>(HIST("hCollTimeRes"))->Fill(collision.collisionTimeRes());
   
 
     // First (outer) loop over all tracks in a given collision
@@ -244,28 +302,35 @@ struct taskYann {
       if (!isTrackAccepted(track1))
         continue;
 
+      // Tracks time resolution distribution
+      //registryTime.get<TH1>(HIST("hTrackTimeRes"))->Fill(track1.trackTimeRes());
+
+
       auto mom1 = track1.tpcInnerParam();
       auto dedx1 = track1.tpcSignal();
       auto beta1 = tofBeta(track1);
       auto sign1 = track1.sign();
       
-      // Initial TPC, TOF histograms
-      if (track1.hasTOF() && mom1 > 0.5)
+      // TPC, TOF histograms after "primary track quality", but before PID
+      if (track1.hasTOF() && mom1 > 0.5) {
         registry.get<TH2>(HIST("hTOF_Initial"))->Fill(sign1*mom1, beta1);
+        registry.get<TH2>(HIST("hTOFInitialBetterRes"))->Fill(sign1*mom1, beta1);
+      }
       registry.get<TH2>(HIST("hTPC_Initial"))->Fill(sign1*mom1, dedx1);
 
       // Sign condition to select particles/antiparticles
       // Select : sign > 0 = Antiparticles ; sign < 0 = Particles
-      if (sign1 > 0)
+      if (sign1 < 0)
         continue;
 
       // MC Matching of generated (anti-)protons, counts nb of generated particles
       if constexpr (requires {track1.has_mcParticle();}) {
         if (track1.has_mcParticle()) {
           auto const& p1 = track1.mcParticle();
+
           if (p1.pt() > cfgPtMin) {
             // Select : kProtonBar = Anti-proton efficiency ; kProton = Proton efficiency
-            if (p1.pdgCode() == kProtonBar) 
+            if (p1.pdgCode() == kProton) 
               registryMC.get<TH1>(HIST("hPt_Matched"))->Fill(p1.pt());
           }
         }
@@ -278,6 +343,50 @@ struct taskYann {
       
       }
 
+
+
+      // TPC and TOF histograms after PID 1
+      if (!track1.hasTOF() || mom1<0.5) { // TPC
+        registry.get<TH2>(HIST("hTPC"))->Fill(sign1*mom1, dedx1);
+      }
+      else { // TOF
+        registry.get<TH2>(HIST("hTOF"))->Fill(sign1*mom1, beta1);
+        registry.get<TH2>(HIST("hTOFBetterRes"))->Fill(sign1*mom1, beta1);
+        registryTime.get<TH1>(HIST("hCollTimeRes"))->Fill(collision.collisionTimeRes());
+        //registryTime.get<TH2>(HIST("hTTR_beta"))->Fill(track1.trackTimeRes(), beta1);
+        /*if (beta1 < 0.4) {
+          registryTime.get<TH1>(HIST("hCollTimeRes_beta_under04"))->Fill(collision.collisionTimeRes());
+          registryTime.get<TH1>(HIST("hTrackTimeRes_beta_under04"))->Fill(track1.trackTimeRes());
+          registry.get<TH2>(HIST("hTOF_under04"))->Fill(sign1*mom1, beta1);
+        }
+        else {
+          registryTime.get<TH1>(HIST("hCollTimeRes_beta_over04"))->Fill(collision.collisionTimeRes());
+          registryTime.get<TH1>(HIST("hTrackTimeRes_beta_over04"))->Fill(track1.trackTimeRes());
+          registry.get<TH2>(HIST("hTOF_over04"))->Fill(sign1*mom1, beta1);
+        }*/
+      }
+
+      // Tracks time resolution distribution
+      registryTime.get<TH1>(HIST("hTrackTimeRes"))->Fill(track1.trackTimeRes());
+
+      // MC TPC and TOF after PID 1
+      if constexpr (requires {track1.has_mcParticle();}) {
+        if (track1.has_mcParticle()) {
+          auto const& p1 = track1.mcParticle();
+          if (isTrueProton(p1, kProton)) {
+            if (track1.hasTOF() && mom1 > 0.5)
+              registryMC.get<TH2>(HIST("hTOFMC1"))->Fill(sign1*mom1, beta1);
+            registryMC.get<TH2>(HIST("hTPCMC1"))->Fill(sign1*mom1, dedx1);
+          }
+        }
+      }
+
+
+      static int ntracks = 0;
+      if (ntracks % 10000 == 0)
+        // LOG(info) << "Tracks : " << ntracks;
+      ntracks++;
+
       // Second (inner) loop over all tracks in a given collision
       for (auto const& track2 : tracks) {
         
@@ -289,11 +398,18 @@ struct taskYann {
           continue;
 
         double m = 0;
-        m = sqrt(InvariantMass(track1, track2, 0.9383, /*0.1396*/ 0.9383));
+        m = sqrt(InvariantMass(track1, track2, 0.9383, 0.1396 /*0.9383*/));
 
+        // PID for track2, only for etaC meson analysis
+        //if (!isTrackProton(track2))
+          //continue;
+        
+        // Dmeson to discard D+/- mesons from invariant mass for Enriched MC data
+        bool Dmeson = false;
 
         // MC Truth and Matched block
-        // Conditions on track2 only for etaC meson
+        // All conditions on track2 only for etaC meson
+        // int idx=-1;
         if constexpr (requires {track1.has_mcParticle();}) {
           int idx=-1;
           if (track1.has_mcParticle() && track2.has_mcParticle()) {
@@ -302,35 +418,165 @@ struct taskYann {
 
             // For argument "type" of isTrueProton(track, type)
             // Select : kProton = proton PID ; kProtonBar = antiproton PID
-            if (isTrueProton(p1, kProtonBar) && isTrueProton(p2, kProton)) {
+            if (isTrueProton(p1, kProton) /*&& isTrueProton(p2, kProtonBar)*/) {
               registryMC.get<TH1>(HIST("hMinvMC"))->Fill(m);
-              if (track1.hasTOF() && mom1 > 0.5)
-                registryMC.get<TH2>(HIST("hTofMC1"))->Fill(sign1*mom1, beta1);
-              registryMC.get<TH2>(HIST("hTpcMC1"))->Fill(sign1*mom1, dedx1);
-              }
-              if (p1.has_mothers()) {
-                auto const& mother = p1.template mothers_first_as<aod::McParticles>();
-                // Select : kLambda0Bar = antiproton PID ; kLambda0 = proton PID
-                //if (mother.pdgCode() == kLambda0Bar)
-                if (mother.pdgCode() == 441) // PDG code of etaC meson
-                  idx = mother.globalIndex();
-              }
             }
+            if (p1.has_mothers()) {
+              auto const& mother = p1.template mothers_first_as<aod::McParticles>();
+              // Select : kLambda0Bar = antiproton PID ; kLambda0 = proton PID
+              if (mother.pdgCode() == kLambda0)
+              //if (mother.pdgCode() == 441) // PDG code of etaC meson
+                idx = mother.globalIndex();
+              if (std::abs(mother.pdgCode()) == 421)
+                Dmeson = true;
+            }
+          }
           if (track2.has_mcParticle()) {
             auto const& p = track2.mcParticle();
-            if (p.has_mothers()) {
+            if (/*isTrueProton(p, kProton) &&*/ p.has_mothers()) {
               auto const& mother = p.template mothers_first_as<aod::McParticles>();
-              if (mother.globalIndex() == idx)
+              if (mother.globalIndex() == idx) {
                 registryMC.get<TH1>(HIST("hMinvMC_Matched"))->Fill(m);
+                // LOG(info) << "idx: " << idx;
+              }
+            }
+          }
+        }
+          
+        if (!Dmeson)
+          registry.get<TH1>(HIST("hMinv_PID"))->Fill(m);
+
+        
+      }
+    }
+  }
+
+
+  // Antonin's analysis
+
+  HistogramRegistry registryAntonin{
+    "registryAntonin",
+    {
+      {"hpTPC", "p(TPC); Momentum p  [GeV / c]; dE/dx", { HistType::kTH2F, { { 400, -4., 4. }, { 200, 0., 1000 } } } },
+      {"hpbarTPC", "#bar{p}(TPC); Momentum p  [GeV / c]; dE/dx", { HistType::kTH2F, { { 400, -4., 4. }, { 200, 0., 1000 } } } },
+      {"hpTOF", "p(TOF); Momentum p  [GeV / c]; #beta", { HistType::kTH2F, { { 500, -5., 5. }, { 220, 0., 1.1 } } } },
+      {"hpbarTOF", "#bar{p}(TOF); Momentum p  [GeV / c]; #beta", { HistType::kTH2F, { { 500, -5., 5. }, { 220, 0., 1.1 } } } },
+      {"hMinv_TPCTPC", "p(TPC) + #bar{p}(TPC); M_{inv} ( p#bar{p} )  [GeV /c^{2}]; Entries  per  1 MeV/c", { HistType::kTH1F, { { 2800, 1., 3.8 } } } },
+      {"hMinv_TPCTOF", "p(TPC) + #bar{p}(TOF); M_{inv} ( p#bar{p} )  [GeV /c^{2}]; Entries  per  1 MeV/c", { HistType::kTH1F, { { 2800, 1., 3.8 } } } },
+      {"hMinv_TOFTPC", "p(TOF) + #bar{p}(TPC); M_{inv} ( p#bar{p} )  [GeV /c^{2}]; Entries  per  1 MeV/c", { HistType::kTH1F, { { 2800, 1., 3.8 } } } },
+      {"hMinv_TOFTOF", "p(TOF) + #bar{p}(TOF); M_{inv} ( p#bar{p} )  [GeV /c^{2}]; Entries  per  1 MeV/c", { HistType::kTH1F, { { 2800, 1., 3.8 } } } },
+    }
+  };
+  
+  template <typename CollisionTypeContainer, typename TrackTypeContainer>
+  void processAntonin(CollisionTypeContainer const& collision, TrackTypeContainer const& tracks)
+  {
+
+    if (!isCollisionAccepted(collision))
+      return;
+
+    
+    for (auto const& track1 : tracks) {
+
+      // Track quality
+      if (!isTrackAccepted(track1))
+        continue;
+
+      auto mom1 = track1.tpcInnerParam();
+      auto dedx1 = track1.tpcSignal();
+      auto beta1 = tofBeta(track1);
+      auto sign1 = track1.sign();
+
+      // p < 0.5 GeV/c cut
+      //if (mom1 < 0.5)
+        //continue;
+
+      // Histograms TPC, TOF
+      if (sign1 > 0) { // Particles
+        if (isTrackProton(track1)) { // Proton
+          if (!track1.hasTOF() || mom1<0.5) { // TPC
+            registryAntonin.get<TH2>(HIST("hpTPC"))->Fill(sign1*mom1, dedx1);
+          }
+          else { // TOF
+            registryAntonin.get<TH2>(HIST("hpTOF"))->Fill(sign1*mom1, beta1);
+          }
+        }
+      }
+      else { // Anti-particles
+        if (isTrackProton(track1)) { // Anti-proton
+          if (!track1.hasTOF() || mom1<0.5) { // TPC
+            registryAntonin.get<TH2>(HIST("hpbarTPC"))->Fill(sign1*mom1, dedx1);
+          }
+          else { // TOF
+            registryAntonin.get<TH2>(HIST("hpbarTOF"))->Fill(sign1*mom1, beta1);
+          }
+        }        
+      }
+
+
+      // Select : sign > 0 = Antiparticles ; sign < 0 = Particles
+      if (sign1 < 0)
+        continue;
+
+      // PID
+      if (!isTrackProton(track1))
+        continue;
+
+      for (auto const& track2 : tracks) {
+
+        // Track quality
+        if (!isTrackAccepted(track2))
+          continue;
+
+        auto sign2 = track2.sign();
+        auto mom2 = track2.tpcInnerParam();
+
+        if (sign2 == sign1)
+          continue;
+
+        // p < 0.5 GeV/c cut
+        //if (mom2 < 0.5)
+          //continue;
+
+
+        // PID for track2, only for etaC meson analysis
+        //if (!isTrackProton(track2))
+          //continue;
+
+        // Dmeson to discard D+/- mesons from invariant mass for Enriched MC data
+        bool Dmeson = false;
+
+        double m = 0;
+        m = sqrt(InvariantMass(track1, track2, 0.9383, 0.1396 /*0.9383*/));
+
+
+        if constexpr (requires {track1.has_mcParticle();}) {
+          if (track1.has_mcParticle()) {
+            auto const& p1 = track1.mcParticle();
+            if (p1.has_mothers()) {
+              auto const& mother = p1.template mothers_first_as<aod::McParticles>();
+              if (std::abs(mother.pdgCode()) == 421)
+                Dmeson = true;
             }
           }
         }
 
-        // PID for track2, only for etaC meson analysis
-        if (!isTrackProton(track2))
-          continue;
+
+        if (!Dmeson) {
+          if (!track1.hasTOF() || mom1<0.5) { // TPC 1
+            if(!track2.hasTOF() || mom2<0.5)  // TPC 2
+              registryAntonin.get<TH1>(HIST("hMinv_TPCTPC"))->Fill(m);
+            else // TOF 2
+              registryAntonin.get<TH1>(HIST("hMinv_TPCTOF"))->Fill(m);
+          }
+          else { // TOF 1
+            if(!track2.hasTOF() || mom2<0.5)  // TPC 2
+              registryAntonin.get<TH1>(HIST("hMinv_TOFTPC"))->Fill(m);
+            else // TOF 2
+              registryAntonin.get<TH1>(HIST("hMinv_TOFTOF"))->Fill(m);
+          }
+        }
         
-        registry.get<TH1>(HIST("hMinv_PID"))->Fill(m);
 
       }
     }
@@ -340,12 +586,16 @@ struct taskYann {
   void processData(aod::Collision const& collision, myTracks const& tracks)
   {
     process(collision, tracks);
+    processAntonin(collision, tracks);
   }
   PROCESS_SWITCH(taskYann, processData, "Process data", true);
+
+  
 
   void processMcRec(aod::Collision const& collision, myMcTracks const& tracks, aod::McParticles&)
   {
     process(collision, tracks);
+    processAntonin(collision, tracks);
   }
   PROCESS_SWITCH(taskYann, processMcRec, "Process MC at the reconstruction level", false);
 
@@ -379,33 +629,54 @@ struct taskYann {
         if (particle.pt() > cfgPtMin) { // Produced with a good enough transverse momentum
           // Efficiency for anti-proton or proton
           // Select : kProtonBar = Anti-proton ; kProton = Proton
-          if (particle.pdgCode() == kProtonBar)
+          if (particle.pdgCode() == kProton)
             registryMC_Gen.get<TH1>(HIST("hPt_Generated"))->Fill(particle.pt());
         }
       }
-
-
-      // Anti Lambda efficiency analysis part
-      /*
-      if (particle.has_daughters()) {
-        auto const& daughter = particle.template daughters_first_as<aod::McParticles>();
-        if (std::abs(daughter.eta()) > 0.9)
-          continue;
-      }
-      
-
-      if (particle.pdgCode() == kLambda0Bar)
-        registryMC_Gen.get<TH1>(HIST("hPtMCLbar"))->Fill(particle.pt());
-
-      if (particle.pdgCode() == kLambda0)
-        registryMC_Gen.get<TH1>(HIST("hPtMCL"))->Fill(particle.pt());
-
-      */
-
-
     }
   }
   PROCESS_SWITCH(taskYann, processMcGen, "Process MC at the generator level", false);
+
+
+  void processSelectedData(mySelectedEvent const& collision, myMcTracks const& tracks, aod::McParticles&)
+  //void processSelectedData(mySelectedEvent const& collision, myTracks const& tracks)
+  {
+    if (!collision.sel8())
+      return;
+
+    if (!collision.selection_bit(aod::evsel::kNoSameBunchPileup))
+    //if (!collision.selection_bit(aod::evsel::kNoCollInTimeRangeNarrow))
+    //if (!collision.selection_bit(aod::evsel::kNoCollInTimeRangeStrict))
+      return;
+
+    process(collision, tracks);
+    processAntonin(collision, tracks);
+    //LOG(info) << "Sel8() OK";
+  }
+  PROCESS_SWITCH(taskYann, processSelectedData, "Process data w/ Selected Events", false);
+
+
+
+
+  HistogramRegistry registryBC{
+    "registryBC",
+    {
+      {"hCollDistri", ";#it{N_{Coll}}; Entries", { HistType::kTH1F, { { 20, 0., 10.} } } },
+    }
+  };
+
+
+  void processBC(aod::BC const&, aod::Collisions const& collisions)
+  {
+    int ncol = 0;
+    for (auto const& coll : collisions) {
+      ncol++;
+    }
+    registryBC.get<TH1>(HIST("hCollDistri"))->Fill(ncol);
+  }
+  PROCESS_SWITCH(taskYann, processBC, "Process Bunch Crossings (BC)", false);
+
+
 };
 
 WorkflowSpec defineDataProcessing(ConfigContext const& cfgc)

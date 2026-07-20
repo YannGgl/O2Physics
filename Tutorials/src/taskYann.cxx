@@ -26,6 +26,7 @@
 
 #include <TPDGCode.h>
 
+#include "Common/CCDB/EventSelectionParams.h"
 #include "Common/DataModel/EventSelection.h"
 
 

@@ -940,10 +940,11 @@ struct taskYann {
 
     // Loop directly over all MC particles in this collision
     for (auto const& particle : particles) {
+      // pT > 0.5 GeV/c cut
       if (particle.pt() > cfgPtMin) {
 
-        // Directly EtaC particle
-        if (particle.pdgCode() == 441 && std::abs(particle.y()) < 0.5) // EtaC
+        // Directly EtaC particle (pdgCode : 441) w/ rapidity cut |y| < 0.5
+        if (particle.pdgCode() == 441 && std::abs(particle.y()) < 0.5) 
           registryMC_Gen.get<TH1>(HIST("hEtaCPt_Generated"))->Fill(particle.pt());
 
         // EtaC as mother of a particle
@@ -960,13 +961,13 @@ struct taskYann {
               if (isTrueProton(particle, kProton) && particle.has_mothers()) {
                 auto const& mother1 = particle.template mothers_first_as<aod::McParticles>();
 
-                if (mother1.pdgCode() == 441 && std::abs(mother1.y()) < 0.5) // PDG code of EtaC meson
+                if (mother1.pdgCode() == 441 && std::abs(mother1.y()) < 0.5) // TODO? : Add pT cut on etaC mother
                   idxEtaC = mother1.globalIndex();
               }
               if (isTrueProton(p2, kProtonBar) && p2.has_mothers()) {
                 auto const& mother2 = p2.template mothers_first_as<aod::McParticles>();
 
-                if (mother2.globalIndex() == idxEtaC && std::abs(mother2.y()) < 0.5)
+                if (mother2.globalIndex() == idxEtaC && std::abs(mother2.y()) < 0.5) // TODO? : Add pT cut on etaC mother
                   registryMC_Gen.get<TH1>(HIST("hEtaCToppBarPt_Generated"))->Fill(mother2.pt());
               }
             }
@@ -976,7 +977,7 @@ struct taskYann {
       }
      
 
-      if (!particle.isPhysicalPrimary())
+      if (!particle.isPhysicalPrimary()) // Primary = From collision vertex ?? or from PV ?? Remove ??
         continue;
 
       // Efficiency part
@@ -991,7 +992,7 @@ struct taskYann {
         if (particle.has_mothers()) {
           auto const& mother = particle.template mothers_first_as<aod::McParticles>();
 
-          if (mother.pdgCode() == 441 && std::abs(mother.y()) < 0.5) {
+          if (mother.pdgCode() == 441 && std::abs(mother.y()) < 0.5) { // TODO? : Add pT cut on etaC mother
             if (particle.pdgCode() == kProton) { // EtaC from proton
               registryMC_Gen.get<TH1>(HIST("hEtaCAsMotherOfpPt_Generated"))->Fill(mother.pt());
               registryMC_Gen.get<TH1>(HIST("hpWithEtaCMotherPt_Generated"))->Fill(particle.pt());
